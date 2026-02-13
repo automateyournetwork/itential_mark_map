@@ -127,6 +127,7 @@ export class MarkmapHandler {
     // Set up global objects for markmap-view
     (global as any).window = window;
     (global as any).document = document;
+    (global as any).navigator = window.navigator;
     (global as any).SVGElement = window.SVGElement;
     (global as any).Element = window.Element;
 
@@ -168,6 +169,7 @@ export class MarkmapHandler {
       // Clean up global objects
       delete (global as any).window;
       delete (global as any).document;
+      delete (global as any).navigator;
       delete (global as any).SVGElement;
       delete (global as any).Element;
     }
