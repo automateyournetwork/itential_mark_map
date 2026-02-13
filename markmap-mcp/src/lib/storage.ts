@@ -5,10 +5,15 @@
  * automatically persists its output (SVG, HTML, Markdown)
  * to a dedicated folder structure.
  *
+ * Follows the same durability pattern as gait_mcp:
+ * - fsync after every write
+ * - mkdir with parents=True, exist_ok=True
+ * - Per-agent directory isolation
+ *
  * @module lib/storage
  */
 
-import { promises as fs } from 'fs';
+import { promises as fs, openSync, writeSync, fsyncSync, closeSync } from 'fs';
 import path from 'path';
 
 /**
@@ -35,8 +40,22 @@ export interface SavedStructureFiles {
 }
 
 /**
+ * Write a file to disk with fsync for durability (matching gait_mcp pattern).
+ */
+function writeFileSync(filePath: string, content: string): void {
+  const fd = openSync(filePath, 'w');
+  try {
+    writeSync(fd, content, null, 'utf-8');
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
  * Sanitize an agent ID to prevent path traversal.
  * Only allows [a-zA-Z0-9._-] characters.
+ * Matches gait_mcp pattern: safe_id = "".join(c for c in agent_id if c.isalnum() or c in "-_.")
  *
  * @param agentId - Raw agent ID string
  * @returns Sanitized agent ID safe for use as directory name
@@ -65,6 +84,7 @@ export function sanitizeAgentId(agentId: string): string {
 export async function ensureAgentDir(agentId: string): Promise<string> {
   const sanitized = sanitizeAgentId(agentId);
   const agentDir = path.join(MARKMAP_STORAGE_ROOT, sanitized);
+  console.error(`[storage] Ensuring agent dir: ${agentDir}`);
   await fs.mkdir(agentDir, { recursive: true });
   return agentDir;
 }
@@ -132,6 +152,7 @@ export function generateHtml(svgContent: string, title: string): string {
 
 /**
  * Save SVG, HTML, and Markdown outputs to the agent's storage directory.
+ * Uses fsync for durability (matching gait_mcp pattern).
  *
  * @param agentId - Agent identifier
  * @param toolName - Name of the tool that produced the output
@@ -156,11 +177,17 @@ export async function saveOutputs(
   const title = `Markmap — ${toolName} (${new Date(timestamp).toISOString()})`;
   const htmlContent = generateHtml(svgContent, title);
 
-  await Promise.all([
-    fs.writeFile(svgPath, svgContent, 'utf-8'),
-    fs.writeFile(htmlPath, htmlContent, 'utf-8'),
-    fs.writeFile(mdPath, markdownContent, 'utf-8'),
-  ]);
+  console.error(`[storage] Writing files to ${agentDir}:`);
+  console.error(`[storage]   ${baseName}.svg (${svgContent.length} bytes)`);
+  console.error(`[storage]   ${baseName}.html (${htmlContent.length} bytes)`);
+  console.error(`[storage]   ${baseName}.md (${markdownContent.length} bytes)`);
+
+  // Write with fsync for durability (matching gait_mcp pattern)
+  writeFileSync(svgPath, svgContent);
+  writeFileSync(htmlPath, htmlContent);
+  writeFileSync(mdPath, markdownContent);
+
+  console.error(`[storage] All files written successfully`);
 
   return { svg: svgPath, html: htmlPath, md: mdPath };
 }
@@ -168,6 +195,7 @@ export async function saveOutputs(
 /**
  * Save markdown and JSON structure outputs to the agent's storage directory.
  * Used by getStructure which has no SVG output.
+ * Uses fsync for durability (matching gait_mcp pattern).
  *
  * @param agentId - Agent identifier
  * @param toolName - Name of the tool that produced the output
@@ -188,10 +216,14 @@ export async function saveStructureOutputs(
   const mdPath = path.join(agentDir, `${baseName}.md`);
   const jsonPath = path.join(agentDir, `${baseName}.json`);
 
-  await Promise.all([
-    fs.writeFile(mdPath, markdownContent, 'utf-8'),
-    fs.writeFile(jsonPath, JSON.stringify(structureData, null, 2), 'utf-8'),
-  ]);
+  console.error(`[storage] Writing structure files to ${agentDir}:`);
+  console.error(`[storage]   ${baseName}.md (${markdownContent.length} bytes)`);
+
+  // Write with fsync for durability (matching gait_mcp pattern)
+  writeFileSync(mdPath, markdownContent);
+  writeFileSync(jsonPath, JSON.stringify(structureData, null, 2));
+
+  console.error(`[storage] All files written successfully`);
 
   return { md: mdPath, json: jsonPath };
 }
@@ -201,5 +233,6 @@ export async function saveStructureOutputs(
  * Called once at server startup.
  */
 export async function initStorageRoot(): Promise<void> {
+  console.error(`[storage] Initializing storage root: ${MARKMAP_STORAGE_ROOT}`);
   await fs.mkdir(MARKMAP_STORAGE_ROOT, { recursive: true });
 }
