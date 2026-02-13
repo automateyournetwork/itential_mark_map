@@ -125,11 +125,26 @@ export class MarkmapHandler {
     const { document } = window;
 
     // Set up global objects for markmap-view
+    // Provide all browser APIs that markmap-view / d3 may reference
     (global as any).window = window;
     (global as any).document = document;
     (global as any).navigator = window.navigator;
     (global as any).SVGElement = window.SVGElement;
     (global as any).Element = window.Element;
+    (global as any).HTMLElement = window.HTMLElement;
+    (global as any).requestAnimationFrame = (cb: Function) => setTimeout(cb, 0);
+    (global as any).cancelAnimationFrame = (id: any) => clearTimeout(id);
+    (global as any).ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+    (global as any).MutationObserver = window.MutationObserver || class MutationObserver {
+      observe() {}
+      disconnect() {}
+      takeRecords() { return []; }
+    };
+    (global as any).getComputedStyle = window.getComputedStyle;
 
     try {
       // Get assets and load them
@@ -172,6 +187,12 @@ export class MarkmapHandler {
       delete (global as any).navigator;
       delete (global as any).SVGElement;
       delete (global as any).Element;
+      delete (global as any).HTMLElement;
+      delete (global as any).requestAnimationFrame;
+      delete (global as any).cancelAnimationFrame;
+      delete (global as any).ResizeObserver;
+      delete (global as any).MutationObserver;
+      delete (global as any).getComputedStyle;
     }
   }
 
