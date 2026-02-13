@@ -90,13 +90,20 @@ export async function ensureAgentDir(agentId: string): Promise<string> {
 }
 
 /**
- * Generate a standalone HTML page wrapping an SVG mindmap.
+ * Generate a standalone HTML page that renders a markmap client-side.
  *
- * @param svgContent - The SVG markup to embed
+ * Server-side SVG generation via JSDOM produces zero-coordinate paths because
+ * JSDOM has no layout engine.  Instead we embed the source Markdown and load
+ * markmap-lib + markmap-view from CDN so the browser performs the layout.
+ *
+ * @param markdownContent - Source Markdown to render as a mindmap
  * @param title - Page title
  * @returns Complete HTML document string
  */
-export function generateHtml(svgContent: string, title: string): string {
+export function generateHtml(markdownContent: string, title: string): string {
+  // Escape backticks and backslashes so the markdown survives a JS template literal
+  const escaped = markdownContent.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,7 +117,6 @@ export function generateHtml(svgContent: string, title: string): string {
       background: #f5f5f5;
       display: flex;
       flex-direction: column;
-      align-items: center;
       min-height: 100vh;
     }
     header {
@@ -121,21 +127,11 @@ export function generateHtml(svgContent: string, title: string): string {
       text-align: center;
     }
     header h1 { font-size: 1.1rem; color: #333; }
-    .container {
+    #markmap {
       flex: 1;
       width: 100%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 24px;
-      overflow: auto;
-    }
-    svg {
-      max-width: 100%;
-      height: auto;
+      min-height: calc(100vh - 52px);
       background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
     }
   </style>
 </head>
@@ -143,9 +139,20 @@ export function generateHtml(svgContent: string, title: string): string {
   <header>
     <h1>${title}</h1>
   </header>
-  <div class="container">
-    ${svgContent}
-  </div>
+  <svg id="markmap"></svg>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.17.0/dist/browser/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.17.0/dist/browser/index.js"></script>
+  <script>
+    const md = \`${escaped}\`;
+    const { Transformer } = markmap;
+    const { Markmap } = markmap;
+    const transformer = new Transformer();
+    const { root } = transformer.transform(md);
+    const svg = document.getElementById('markmap');
+    Markmap.create(svg, { autoFit: true }, root);
+  </script>
 </body>
 </html>`;
 }
@@ -175,7 +182,7 @@ export async function saveOutputs(
   const mdPath = path.join(agentDir, `${baseName}.md`);
 
   const title = `Markmap — ${toolName} (${new Date(timestamp).toISOString()})`;
-  const htmlContent = generateHtml(svgContent, title);
+  const htmlContent = generateHtml(markdownContent, title);
 
   console.error(`[storage] Writing files to ${agentDir}:`);
   console.error(`[storage]   ${baseName}.svg (${svgContent.length} bytes)`);
