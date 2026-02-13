@@ -92,18 +92,16 @@ export async function ensureAgentDir(agentId: string): Promise<string> {
 /**
  * Generate a standalone HTML page that renders a markmap client-side.
  *
- * Server-side SVG generation via JSDOM produces zero-coordinate paths because
- * JSDOM has no layout engine.  Instead we embed the source Markdown and load
- * markmap-lib + markmap-view from CDN so the browser performs the layout.
+ * Uses the official markmap-autoloader from CDN which automatically pulls
+ * in d3, markmap-lib, and markmap-view.  The source Markdown is placed
+ * inside a <script type="text/template"> block so the autoloader picks it
+ * up and renders an interactive mindmap in the browser.
  *
  * @param markdownContent - Source Markdown to render as a mindmap
  * @param title - Page title
  * @returns Complete HTML document string
  */
 export function generateHtml(markdownContent: string, title: string): string {
-  // Escape backticks and backslashes so the markdown survives a JS template literal
-  const escaped = markdownContent.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -114,45 +112,19 @@ export function generateHtml(markdownContent: string, title: string): string {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f5f5f5;
-      display: flex;
-      flex-direction: column;
-      min-height: 100vh;
-    }
-    header {
-      padding: 12px 24px;
       background: #fff;
-      width: 100%;
-      border-bottom: 1px solid #e0e0e0;
-      text-align: center;
     }
-    header h1 { font-size: 1.1rem; color: #333; }
-    #markmap {
-      flex: 1;
+    svg.markmap {
       width: 100%;
-      min-height: calc(100vh - 52px);
-      background: #fff;
+      height: 100vh;
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/markmap-autoloader@0.18"></script>
 </head>
 <body>
-  <header>
-    <h1>${title}</h1>
-  </header>
-  <svg id="markmap"></svg>
-
-  <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-  <script src="https://cdn.jsdelivr.net/npm/markmap-lib@0.17.0/dist/browser/index.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/markmap-view@0.17.0/dist/browser/index.js"></script>
-  <script>
-    const md = \`${escaped}\`;
-    const { Transformer } = markmap;
-    const { Markmap } = markmap;
-    const transformer = new Transformer();
-    const { root } = transformer.transform(md);
-    const svg = document.getElementById('markmap');
-    Markmap.create(svg, { autoFit: true }, root);
-  </script>
+  <div class="markmap">
+    <script type="text/template">${markdownContent}</script>
+  </div>
 </body>
 </html>`;
 }
